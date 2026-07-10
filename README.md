@@ -14,11 +14,11 @@
 
 <h2>Description</h2>
 <br/>
-In this project, we build a VS Code-style desktop IDE for a locally hosted DeepSeek V4 Flash model. The app combines the Monaco editor (the editor component that powers VS Code), a file explorer, and a streaming chat panel with an agent mode that can read files, write files, and run shell commands inside the open workspace. Everything runs against inference servers on localhost, so the IDE works fully offline with no API keys and no cloud dependency.
+In this project, we build a VS Code-style desktop IDE for locally hosted LLMs. The app combines the Monaco editor (the editor component that powers VS Code), a file explorer, and a streaming chat panel with an agent mode that can read files, write files, and run shell commands inside the open workspace. Everything runs against inference servers on localhost, so the IDE works fully offline with no API keys and no cloud dependency. Any model behind a local OpenAI-compatible endpoint or an Ollama daemon can drive it; the reference setup here is DeepSeek V4 Flash served by DwarfStar's <code>ds4-server</code>.
 <br />
 <br/> Project Architecture: <br/>
 <img src="docs/images/architecture.svg"/>
-<br/> The Electron shell embeds an Express backend that serves the UI and exposes a small local API. Chat requests are proxied to a DwarfStar <code>ds4-server</code> instance, which serves a local DeepSeek V4 Flash GGUF over an OpenAI-compatible API using Metal on Apple Silicon. If no <code>ds4-server</code> is listening, the IDE starts one automatically as a detached process, so a single <code>npm start</code> brings up the entire stack. <br/> <br/> Models running under a local Ollama daemon appear in the same model dropdown, and because the IDE and a terminal agent can memory-map the same GGUF file, running both side by side does not load the weights into RAM twice. <br/>
+<br/> The Electron shell embeds an Express backend that serves the UI and exposes a small local API. Chat requests are proxied to whichever local model is selected in the dropdown: a DwarfStar <code>ds4-server</code> instance serving a GGUF over an OpenAI-compatible API using Metal on Apple Silicon, or any model running under a local Ollama daemon. If no <code>ds4-server</code> is listening, the IDE starts one automatically as a detached process, so a single <code>npm start</code> brings up the entire stack. <br/> <br/> The Explorer sidebar shows the workspace the model is working in, and the chat panel header always reflects the active model. Because the IDE and a terminal agent can memory-map the same GGUF file, running both side by side does not load the weights into RAM twice. <br/>
 
 <br/>
 
@@ -68,6 +68,8 @@ npm start        # desktop app
 | **Non-think** | Direct answers, fastest responses. Good for quick completions and commands.  |
 | **Think High** | Standard reasoning mode (server default). Good for refactors and debugging. |
 | **Think Max** | Deepest reasoning. Requires `ds4-server --ctx 393216` or larger; smaller contexts fall back to Think High automatically. |
+
+The thinking dropdown applies to any model that supports reasoning modes — Ollama models with thinking support use the same toggle.
 
 ## Step 3: Agent mode
 

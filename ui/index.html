@@ -27,6 +27,7 @@
   <div id="main">
     <div id="sidebar">
       <div id="sidebar-header">EXPLORER</div>
+      <div id="ws-name" title="">NO FOLDER OPEN</div>
       <div id="file-tree"></div>
     </div>
     <div id="editor-area">
@@ -36,13 +37,13 @@
     </div>
     <div id="chat-panel">
       <div id="chat-header">
-        <span>DEEPSEEK V4 FLASH</span>
+        <span id="chat-model-label">LOCAL MODEL</span>
         <button id="clear-chat" title="Clear conversation">New chat</button>
       </div>
       <div id="chat-messages"></div>
       <div id="chat-input-area">
         <div id="context-chips"></div>
-        <textarea id="chat-input" rows="3" placeholder="Ask DeepSeek… (Enter to send, Shift+Enter for newline)"></textarea>
+        <textarea id="chat-input" rows="3" placeholder="Ask the model… (Enter to send, Shift+Enter for newline)"></textarea>
         <div id="chat-buttons">
           <button id="attach-file" title="Attach the active editor file to your message">+ Active file</button>
           <button id="attach-selection" title="Attach the current editor selection">+ Selection</button>

@@ -519,6 +519,16 @@ function updateWsLabel() {
   const el = $('#ws-path');
   el.textContent = state.workspace ? state.workspace.replace(/^\/Users\/[^/]+/, '~') : 'no folder open';
   el.title = state.workspace;
+  const name = $('#ws-name');
+  name.textContent = state.workspace ? state.workspace.split('/').filter(Boolean).pop().toUpperCase() : 'NO FOLDER OPEN';
+  name.title = state.workspace || '';
+}
+
+function updateModelLabel() {
+  const label = state.model.startsWith('ds4:')
+    ? state.model.slice(4) + ' · local'
+    : state.model;
+  $('#chat-model-label').textContent = label.toUpperCase();
 }
 
 async function loadModels() {
@@ -534,9 +544,11 @@ async function loadModels() {
     }
     if (models.includes(state.model)) sel.value = state.model;
     else if (models.length) { state.model = models[0]; sel.value = models[0]; }
+    updateModelLabel();
     sel.addEventListener('change', () => {
       state.model = sel.value;
       localStorage.setItem('fc.model', sel.value);
+      updateModelLabel();
     });
   } catch (err) {
     setStatus(`Ollama unreachable: ${err.message}`);
