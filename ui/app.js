@@ -251,7 +251,13 @@ function scrollChat() {
 function createAssistantView() {
   const root = document.createElement('div');
   root.className = 'msg assistant';
+  const pending = document.createElement('div');
+  pending.className = 'pending';
+  pending.textContent = '▶ PROCESSING';
+  root.appendChild(pending);
   $('#chat-messages').appendChild(root);
+
+  const clearPending = () => pending.parentElement && pending.remove();
 
   let thinkBox = null, thinkText = null;
   let mdEl = null, mdBuf = '';
@@ -270,6 +276,7 @@ function createAssistantView() {
 
   return {
     thinking(text) {
+      clearPending();
       if (!thinkBox) {
         thinkBox = document.createElement('details');
         thinkBox.className = 'thinking-box';
@@ -287,6 +294,7 @@ function createAssistantView() {
       scrollChat();
     },
     token(text) {
+      clearPending();
       if (thinkBox && thinkBox.open) {
         thinkBox.open = false;
         thinkBox.querySelector('summary').textContent = '▸ THOUGHTS (CLICK TO EXPAND)';
@@ -300,6 +308,7 @@ function createAssistantView() {
       queueRender();
     },
     toolCall(name, args) {
+      clearPending();
       const card = document.createElement('div');
       card.className = 'tool-card';
       const argStr = JSON.stringify(args);
@@ -316,8 +325,10 @@ function createAssistantView() {
       scrollChat();
     },
     finish() {
+      clearPending();
       renderMd();
       if (thinkBox && thinkBox.open) thinkBox.open = false;
+      if (!root.childElementCount) root.remove(); // aborted before any output
     },
   };
 }
