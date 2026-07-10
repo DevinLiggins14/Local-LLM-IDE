@@ -76,9 +76,16 @@ The thinking dropdown applies to any model that supports reasoning modes — Oll
 <img src="docs/images/agent-mode.png"/>
 
 <br/> Enabling the <b>Agent</b> checkbox gives the model four tools scoped to the workspace: <code>read_file</code>, <code>write_file</code>, <code>list_directory</code>, and <code>run_command</code>. Tool calls and their results render as cards in the conversation while the model works, and the file tree and open editors refresh automatically when the agent changes files. <br/>
-<br/> In the run above, DeepSeek V4 Flash was asked to write unit tests for the open file: it created <code>tests/test_tasks.py</code>, executed it with <code>python3</code>, and reported all ten tests passing — entirely offline. <br/>
+<br/> In the run above, DeepSeek V4 Flash was asked to write unit tests for the open file: it created <code>tests/test_tasks.py</code>, executed it with <code>python3</code>, and reported every test passing — entirely offline. <br/>
 
-## Step 4: Configuration
+## Step 4: Choose how the model runs
+
+<img src="docs/images/ds4-config.png"/>
+
+<br/> The <b>DS4 Config</b> panel controls the launch configuration of the inference server itself — the same knobs as running <code>ds4-agent</code> by hand in a terminal. Pick a preset (for example Think Max with a 500,000-token context, the equivalent of <code>./ds4-agent --think-max --ctx 500000</code>), or set a custom context size, GPU power duty cycle, and any extra <code>ds4-server</code> flags. The panel shows the exact launch command and the live status of the current server: pid, context size, and whether Think Max is available. <br/>
+<br/> <b>Apply &amp; Restart</b> kills the running ds4-server and relaunches it detached with the chosen flags; the SYSTEM readout in the sidebar tracks it through <code>LOADING MODEL…</code> back to <code>ONLINE</code>, along with live CPU and RAM usage. <br/>
+
+## Step 5: Configuration
 
 <br/> Sampling is pinned to DeepSeek's recommended <code>temperature=1.0, top_p=1.0</code>; in thinking mode ds4-server applies its fixed sampling defaults regardless, matching DeepSeek's API behavior. Defaults can be overridden with environment variables: <br/>
 <br/>

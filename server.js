@@ -33,24 +33,43 @@ async function ds4Alive() {
   }
 }
 
+const ds4Port = () => new URL(DS4.url).port || '8000';
+
+function spawnDs4(opts = {}) {
+  const kvDir = path.join(os.homedir(), '.ds4-server-kv');
+  fsSync.mkdirSync(kvDir, { recursive: true });
+  const log = fsSync.openSync(path.join(os.homedir(), '.ds4-server.log'), 'a');
+  const args = ['--chdir', DS4.dir, '-m', DS4.gguf, '--host', '127.0.0.1', '--port', ds4Port(),
+    '--kv-disk-dir', kvDir, '--kv-disk-space-mb', '8192', '--ctx', String(opts.ctx || DS4.ctx)];
+  if (opts.power) args.push('--power', String(opts.power));
+  if (opts.extra) args.push(...String(opts.extra).split(/\s+/).filter(Boolean));
+  const child = spawn(DS4.bin, args, { detached: true, stdio: ['ignore', log, log] });
+  child.unref();
+  ds4Spawned = true;
+  console.log(`spawned ds4-server pid ${child.pid}: ${args.join(' ')}`);
+  return child.pid;
+}
+
 // If no ds4-server is listening, launch one detached so it outlives the IDE.
 async function ensureDs4() {
   if (await ds4Alive()) return 'running';
   if (!DS4.autoStart || ds4Spawned) return 'down';
   if (!fsSync.existsSync(DS4.bin)) return 'missing';
-  const kvDir = path.join(os.homedir(), '.ds4-server-kv');
-  fsSync.mkdirSync(kvDir, { recursive: true });
-  const log = fsSync.openSync(path.join(os.homedir(), '.ds4-server.log'), 'a');
-  const child = spawn(
-    DS4.bin,
-    ['--chdir', DS4.dir, '-m', DS4.gguf, '--ctx', DS4.ctx, '--host', '127.0.0.1',
-     '--port', new URL(DS4.url).port || '8000', '--kv-disk-dir', kvDir, '--kv-disk-space-mb', '8192'],
-    { detached: true, stdio: ['ignore', log, log] }
-  );
-  child.unref();
-  ds4Spawned = true;
-  console.log(`ds4-server not running — Local LLM IDE started it (pid ${child.pid}, loading model…)`);
+  spawnDs4();
   return 'starting';
+}
+
+// pid + args of whatever is listening on the ds4 port.
+function ds4Process() {
+  return new Promise((resolve) => {
+    execFile('lsof', ['-ti', `tcp:${ds4Port()}`, '-sTCP:LISTEN'], (err, out) => {
+      const pid = parseInt(out, 10);
+      if (!pid) return resolve(null);
+      execFile('ps', ['-p', String(pid), '-o', 'args='], (err2, args) => {
+        resolve({ pid, args: (args || '').trim() });
+      });
+    });
+  });
 }
 
 const app = express();
@@ -131,6 +150,64 @@ app.get('/api/models', async (req, res) => {
     for (const m of data.models || []) models.push(m.name);
   } catch { /* Ollama not running — ds4 alone is fine */ }
   res.json({ models, ds4: ds4Status });
+});
+
+app.get('/api/ds4/status', async (req, res) => {
+  const [proc, alive] = await Promise.all([ds4Process(), ds4Alive()]);
+  const ctxMatch = proc?.args.match(/--ctx\s+(\d+)/);
+  const ctx = ctxMatch ? parseInt(ctxMatch[1], 10) : null;
+  res.json({
+    alive,
+    loading: !!proc && !alive,
+    pid: proc?.pid || null,
+    args: proc?.args || null,
+    ctx,
+    thinkMaxCapable: ctx !== null && ctx >= 393216,
+  });
+});
+
+// Restart ds4-server with a new launch configuration: kills the ds4-server
+// that owns the port, then spawns a fresh detached one with the new flags.
+app.post('/api/ds4/restart', async (req, res) => {
+  try {
+    const { ctx, power, extra } = req.body || {};
+    if (!fsSync.existsSync(DS4.bin)) throw new Error(`ds4-server binary not found at ${DS4.bin}`);
+    const proc = await ds4Process();
+    if (proc && !/ds4-server/.test(proc.args)) {
+      throw new Error(`port ${ds4Port()} is held by a non-ds4 process (pid ${proc.pid}); not touching it`);
+    }
+    if (proc) {
+      process.kill(proc.pid, 'SIGTERM');
+      for (let i = 0; i < 30 && (await ds4Process()); i++) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      if (await ds4Process()) throw new Error('old ds4-server did not release the port');
+    }
+    const pid = spawnDs4({ ctx, power, extra });
+    res.json({ ok: true, pid });
+  } catch (err) {
+    sendErr(res, err, 500);
+  }
+});
+
+app.get('/api/system', (req, res) => {
+  const total = os.totalmem();
+  const cpu = Math.min(100, Math.round((os.loadavg()[0] / os.cpus().length) * 100));
+  // vm_stat gives real pressure; os.freemem() would count file cache as used.
+  execFile('vm_stat', (err, out) => {
+    let used = total - os.freemem();
+    if (!err) {
+      const page = parseInt(out.match(/page size of (\d+)/)?.[1] || '16384', 10);
+      const grab = (label) => parseInt(out.match(new RegExp(`${label}:\\s+(\\d+)`))?.[1] || '0', 10);
+      used = (grab('Pages active') + grab('Pages wired down') + grab('Pages occupied by compressor')) * page;
+    }
+    res.json({
+      cpu,
+      ram: Math.round((used / total) * 100),
+      ramUsedGB: +(used / 1e9).toFixed(1),
+      ramTotalGB: Math.round(total / 1e9),
+    });
+  });
 });
 
 // ---------- agent tools ----------

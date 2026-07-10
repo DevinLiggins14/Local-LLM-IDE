@@ -22,6 +22,7 @@
     <label class="toggle" title="Let the model read/write files and run commands in the workspace">
       <input type="checkbox" id="agent-toggle" /> Agent
     </label>
+    <button id="ds4-config" title="Configure how ds4-server runs (context size, power, flags)">DS4 Config</button>
   </div>
 
   <div id="main">
@@ -29,6 +30,12 @@
       <div id="sidebar-header">EXPLORER</div>
       <div id="ws-name" title="">NO FOLDER OPEN</div>
       <div id="file-tree"></div>
+      <div id="system-hud">
+        <div class="hud-title">SYSTEM</div>
+        <div class="hud-row"><span class="hud-label">CPU</span><div class="hud-bar"><div id="cpu-bar"></div></div><span id="cpu-val" class="hud-val">--</span></div>
+        <div class="hud-row"><span class="hud-label">RAM</span><div class="hud-bar"><div id="ram-bar"></div></div><span id="ram-val" class="hud-val">--</span></div>
+        <div class="hud-row"><span class="hud-label">DS4</span><span id="ds4-state" class="hud-state">SCANNING…</span></div>
+      </div>
     </div>
     <div id="editor-area">
       <div id="tabs"></div>
@@ -56,6 +63,38 @@
   </div>
 
   <div id="statusbar"><span id="status-left">ready</span><span class="spacer"></span><span id="status-right"></span></div>
+
+  <div id="ds4-modal" class="hidden">
+    <div id="ds4-panel">
+      <div class="panel-title">DS4 LAUNCH CONFIGURATION</div>
+      <div id="ds4-status-line" class="mono">querying server…</div>
+      <label class="field">Preset
+        <select id="ds4-preset">
+          <option value="500000">Think Max — ctx 500000</option>
+          <option value="393216">Think Max — ctx 393216 (minimum)</option>
+          <option value="131072">Balanced — ctx 131072</option>
+          <option value="32768">Fast — ctx 32768</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label class="field">Context tokens
+        <input id="ds4-ctx" type="number" min="4096" step="1024" value="500000" />
+      </label>
+      <label class="field">GPU power (1–100)
+        <input id="ds4-power" type="number" min="1" max="100" value="100" />
+      </label>
+      <label class="field">Extra flags
+        <input id="ds4-extra" type="text" placeholder="e.g. --prefill-chunk 8192" />
+      </label>
+      <div class="field-caption">Launch command</div>
+      <div id="ds4-cmd" class="mono cmd-preview"></div>
+      <div class="modal-note">Applying kills the current ds4-server and relaunches it with these flags. The model reloads (can take a minute); the disk KV cache persists. Think Max needs ctx ≥ 393216.</div>
+      <div class="modal-buttons">
+        <button id="ds4-cancel">Close</button>
+        <button id="ds4-apply" class="primary">Apply &amp; Restart</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/vendor/marked/marked.min.js"></script>
   <script src="/vendor/monaco/vs/loader.js"></script>

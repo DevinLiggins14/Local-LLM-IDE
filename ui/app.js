@@ -36,8 +36,22 @@ function initMonaco() {
   monacoReady = new Promise((resolve) => {
     require.config({ paths: { vs: '/vendor/monaco/vs' } });
     require(['vs/editor/editor.main'], () => {
+      monaco.editor.defineTheme('batcave', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': '#030507',
+          'editor.lineHighlightBackground': '#0a121a',
+          'editorLineNumber.foreground': '#31465a',
+          'editorLineNumber.activeForeground': '#58b6ff',
+          'editorCursor.foreground': '#58b6ff',
+          'editor.selectionBackground': '#124e7e66',
+          'editorIndentGuide.background1': '#101820',
+        },
+      });
       editor = monaco.editor.create($('#editor'), {
-        theme: 'vs-dark',
+        theme: 'batcave',
         automaticLayout: true,
         fontSize: 13,
         minimap: { enabled: false },
@@ -555,6 +569,128 @@ async function loadModels() {
   }
 }
 
+// ---------- system HUD ----------
+
+let ds4Status = null;
+async function pollSystem() {
+  try {
+    const sys = await api('/api/system');
+    $('#cpu-bar').style.width = sys.cpu + '%';
+    $('#cpu-bar').style.background = sys.cpu > 85 ? 'var(--red)' : 'var(--accent-dim)';
+    $('#cpu-val').textContent = sys.cpu + '%';
+    $('#ram-bar').style.width = sys.ram + '%';
+    $('#ram-bar').style.background = sys.ram > 90 ? 'var(--red)' : 'var(--accent-dim)';
+    $('#ram-val').textContent = sys.ram + '%';
+    $('#ram-bar').parentElement.title = `${sys.ramUsedGB} / ${sys.ramTotalGB} GB`;
+  } catch { /* backend gone; leave last values */ }
+  try {
+    ds4Status = await api('/api/ds4/status');
+    const el = $('#ds4-state');
+    el.classList.remove('offline', 'loading');
+    if (ds4Status.alive) {
+      const ktok = ds4Status.ctx ? Math.round(ds4Status.ctx / 1000) + 'K' : '?';
+      el.textContent = `ONLINE · CTX ${ktok}${ds4Status.thinkMaxCapable ? ' · TMAX' : ''}`;
+    } else if (ds4Status.loading) {
+      el.textContent = 'LOADING MODEL…';
+      el.classList.add('loading');
+    } else {
+      el.textContent = 'OFFLINE';
+      el.classList.add('offline');
+    }
+  } catch { /* ignore */ }
+}
+
+// ---------- DS4 launch config ----------
+
+function ds4CmdPreview() {
+  const ctx = $('#ds4-ctx').value || '393216';
+  const power = $('#ds4-power').value;
+  const extra = $('#ds4-extra').value.trim();
+  let cmd = `ds4-server -m <gguf> --host 127.0.0.1 --port 8000 --kv-disk-dir ~/.ds4-server-kv --ctx ${ctx}`;
+  if (power && power !== '100') cmd += ` --power ${power}`;
+  if (extra) cmd += ` ${extra}`;
+  $('#ds4-cmd').textContent = cmd;
+}
+
+function openDs4Modal() {
+  $('#ds4-modal').classList.remove('hidden');
+  const saved = JSON.parse(localStorage.getItem('fc.ds4cfg') || '{}');
+  if (saved.ctx) $('#ds4-ctx').value = saved.ctx;
+  if (saved.power) $('#ds4-power').value = saved.power;
+  if (saved.extra) $('#ds4-extra').value = saved.extra;
+  const presetSel = $('#ds4-preset');
+  const match = [...presetSel.options].find((o) => o.value === String($('#ds4-ctx').value));
+  presetSel.value = match ? match.value : 'custom';
+  ds4CmdPreview();
+  renderDs4Status();
+}
+
+function renderDs4Status() {
+  const line = $('#ds4-status-line');
+  if (!ds4Status) { line.textContent = 'querying server…'; return; }
+  if (ds4Status.alive) {
+    line.innerHTML = `<span class="online">ONLINE</span> · pid ${ds4Status.pid} · ctx ${ds4Status.ctx ?? '?'} · think max ${ds4Status.thinkMaxCapable ? 'available' : 'unavailable (ctx too small)'}<br>`;
+    line.appendChild(document.createTextNode(ds4Status.args || ''));
+  } else if (ds4Status.loading) {
+    line.innerHTML = `<span class="online">LOADING</span> · pid ${ds4Status.pid} — model is being paged in`;
+  } else {
+    line.innerHTML = `<span class="offline">OFFLINE</span> — apply a configuration to launch`;
+  }
+}
+
+async function applyDs4Config() {
+  const cfg = {
+    ctx: parseInt($('#ds4-ctx').value, 10) || 393216,
+    power: parseInt($('#ds4-power').value, 10) || undefined,
+    extra: $('#ds4-extra').value.trim() || undefined,
+  };
+  localStorage.setItem('fc.ds4cfg', JSON.stringify(cfg));
+  const btn = $('#ds4-apply');
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  try {
+    await api('/api/ds4/restart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    });
+    setStatus('ds4-server restarting — model loading');
+    // poll until it comes back
+    for (let i = 0; i < 240; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      await pollSystem();
+      renderDs4Status();
+      if (ds4Status?.alive) break;
+    }
+    setStatus(ds4Status?.alive ? 'ds4-server online' : 'ds4-server still loading (see ~/.ds4-server.log)');
+  } catch (err) {
+    setStatus(`restart failed: ${err.message}`);
+    renderDs4Status();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Apply & Restart';
+  }
+}
+
+function wireDs4Modal() {
+  $('#ds4-config').addEventListener('click', openDs4Modal);
+  $('#ds4-cancel').addEventListener('click', () => $('#ds4-modal').classList.add('hidden'));
+  $('#ds4-modal').addEventListener('click', (e) => {
+    if (e.target === $('#ds4-modal')) $('#ds4-modal').classList.add('hidden');
+  });
+  $('#ds4-preset').addEventListener('change', (e) => {
+    if (e.target.value !== 'custom') $('#ds4-ctx').value = e.target.value;
+    ds4CmdPreview();
+  });
+  for (const id of ['#ds4-ctx', '#ds4-power', '#ds4-extra']) {
+    $(id).addEventListener('input', () => {
+      $('#ds4-preset').value = [...$('#ds4-preset').options].find((o) => o.value === $('#ds4-ctx').value)?.value || 'custom';
+      ds4CmdPreview();
+    });
+  }
+  $('#ds4-apply').addEventListener('click', applyDs4Config);
+}
+
 // ---------- wire up ----------
 
 function init() {
@@ -578,6 +714,10 @@ function init() {
   const thinkSel = $('#think-select');
   thinkSel.value = localStorage.getItem('fc.think') || '';
   thinkSel.addEventListener('change', () => localStorage.setItem('fc.think', thinkSel.value));
+
+  wireDs4Modal();
+  pollSystem();
+  setInterval(pollSystem, 5000);
 }
 
 init();

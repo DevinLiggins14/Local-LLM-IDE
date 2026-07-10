@@ -66,6 +66,12 @@ async function run() {
   await new Promise((r) => setTimeout(r, 800));
   await capture(win, 'agent-mode.png');
 
+  // Shot 3: DS4 launch configuration modal
+  await win.webContents.executeJavaScript(`document.querySelector('#ds4-config').click(); true`);
+  await poll(win, `!document.querySelector('#ds4-modal').classList.contains('hidden') && /ONLINE|OFFLINE|LOADING/.test(document.querySelector('#ds4-status-line').textContent)`, 15000);
+  await new Promise((r) => setTimeout(r, 500));
+  await capture(win, 'ds4-config.png');
+
   electronApp.quit();
 }
 
