@@ -8,6 +8,7 @@ const state = {
   tabs: [], // {path, model, viewState, dirty}
   activePath: null,
   chat: [], // {role, content}
+  sessionId: null,
   attachments: [], // {label, content}
   streaming: false,
   abort: null,
@@ -274,7 +275,7 @@ function createAssistantView() {
         thinkBox.className = 'thinking-box';
         thinkBox.open = true;
         const sum = document.createElement('summary');
-        sum.textContent = '🧠 thinking…';
+        sum.textContent = '▸ THINKING…';
         thinkText = document.createElement('div');
         thinkText.className = 'thinking-text';
         thinkBox.append(sum, thinkText);
@@ -288,7 +289,7 @@ function createAssistantView() {
     token(text) {
       if (thinkBox && thinkBox.open) {
         thinkBox.open = false;
-        thinkBox.querySelector('summary').textContent = '🧠 thoughts (click to expand)';
+        thinkBox.querySelector('summary').textContent = '▸ THOUGHTS (CLICK TO EXPAND)';
       }
       if (!mdEl) {
         mdEl = document.createElement('div');
@@ -302,7 +303,7 @@ function createAssistantView() {
       const card = document.createElement('div');
       card.className = 'tool-card';
       const argStr = JSON.stringify(args);
-      card.innerHTML = `<span class="tool-name">⚙ ${escapeHtml(name)}</span> <span class="tool-args"></span><pre class="tool-output">running…</pre>`;
+      card.innerHTML = `<span class="tool-name">» ${escapeHtml(name)}</span> <span class="tool-args"></span><pre class="tool-output">running…</pre>`;
       card.querySelector('.tool-args').textContent = argStr.length > 120 ? argStr.slice(0, 120) + '…' : argStr;
       root.appendChild(card);
       mdEl = null; // next tokens start a fresh markdown segment after the card
@@ -465,8 +466,114 @@ async function sendChat() {
     $('#stop-btn').classList.add('hidden');
     setStatus('ready');
     if (assistantText) state.chat.push({ role: 'assistant', content: assistantText });
+    saveSession();
     for (const p of touchedFiles) refreshOpenFile(p);
     if (touchedFiles.size) loadTree();
+  }
+}
+
+// ---------- chat sessions ----------
+
+async function saveSession() {
+  if (!state.chat.length) return;
+  if (!state.sessionId) {
+    state.sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+  const firstUser = state.chat.find((m) => m.role === 'user');
+  const title = (firstUser?.content || 'untitled').split('\n')[0].slice(0, 60);
+  try {
+    await api(`/api/chats/${state.sessionId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, model: state.model, messages: state.chat }),
+    });
+  } catch (err) {
+    setStatus(`chat save failed: ${err.message}`);
+  }
+}
+
+function newChat() {
+  state.chat = [];
+  state.sessionId = null;
+  $('#chat-messages').innerHTML = '';
+  $('#chat-history').classList.add('hidden');
+}
+
+function renderStoredMessages() {
+  $('#chat-messages').innerHTML = '';
+  for (const m of state.chat) {
+    if (m.role === 'user') {
+      // strip attached-file blocks from the display copy
+      addUserBubble(m.content.split('\n\n[Attached:')[0]);
+    } else if (m.role === 'assistant') {
+      const el = document.createElement('div');
+      el.className = 'msg assistant';
+      const md = document.createElement('div');
+      md.innerHTML = marked.parse(m.content, { breaks: true });
+      el.appendChild(md);
+      enhanceCodeBlocks(md);
+      $('#chat-messages').appendChild(el);
+    }
+  }
+  scrollChat();
+}
+
+async function toggleHistory() {
+  const panel = $('#chat-history');
+  if (!panel.classList.contains('hidden')) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+  const list = $('#chat-history-list');
+  list.innerHTML = '';
+  try {
+    const { chats } = await api('/api/chats');
+    if (!chats.length) {
+      list.innerHTML = '<div class="history-empty">NO STORED SESSIONS</div>';
+      return;
+    }
+    for (const c of chats) {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      const title = document.createElement('span');
+      title.className = 'h-title';
+      title.textContent = c.title || 'untitled';
+      const meta = document.createElement('span');
+      meta.className = 'h-meta';
+      meta.textContent = `${c.count} msg · ${new Date(c.updatedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+      const del = document.createElement('span');
+      del.className = 'h-del';
+      del.textContent = '✕';
+      del.title = 'Delete this chat';
+      del.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await api(`/api/chats/${c.id}`, { method: 'DELETE' });
+          item.remove();
+          if (state.sessionId === c.id) newChat();
+          if (!list.childElementCount) list.innerHTML = '<div class="history-empty">NO STORED SESSIONS</div>';
+        } catch (err) {
+          setStatus(`delete failed: ${err.message}`);
+        }
+      });
+      item.append(title, meta, del);
+      item.addEventListener('click', async () => {
+        try {
+          const session = await api(`/api/chats/${c.id}`);
+          state.chat = session.messages || [];
+          state.sessionId = session.id;
+          renderStoredMessages();
+          $('#chat-history').classList.add('hidden');
+          setStatus(`loaded chat: ${session.title}`);
+        } catch (err) {
+          setStatus(`load failed: ${err.message}`);
+        }
+      });
+      list.appendChild(item);
+    }
+  } catch (err) {
+    list.innerHTML = `<div class="history-empty">FAILED TO LOAD: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -711,10 +818,8 @@ function init() {
   $('#stop-btn').addEventListener('click', () => state.abort?.abort());
   $('#attach-file').addEventListener('click', attachActiveFile);
   $('#attach-selection').addEventListener('click', attachSelection);
-  $('#clear-chat').addEventListener('click', () => {
-    state.chat = [];
-    $('#chat-messages').innerHTML = '';
-  });
+  $('#clear-chat').addEventListener('click', newChat);
+  $('#chat-history-btn').addEventListener('click', toggleHistory);
   $('#chat-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
   });

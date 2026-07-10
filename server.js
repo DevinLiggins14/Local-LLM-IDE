@@ -236,6 +236,63 @@ app.get('/api/system', async (req, res) => {
   });
 });
 
+// ---------- chat sessions (persisted to disk) ----------
+
+const CHATS_DIR = path.join(os.homedir(), '.local-llm-ide', 'chats');
+fsSync.mkdirSync(CHATS_DIR, { recursive: true });
+
+function chatFile(id) {
+  if (!/^[a-z0-9-]{1,64}$/i.test(id)) throw new Error('invalid chat id');
+  return path.join(CHATS_DIR, `${id}.json`);
+}
+
+app.get('/api/chats', async (req, res) => {
+  try {
+    const files = (await fs.readdir(CHATS_DIR)).filter((f) => f.endsWith('.json'));
+    const chats = [];
+    for (const f of files) {
+      try {
+        const data = JSON.parse(await fs.readFile(path.join(CHATS_DIR, f), 'utf8'));
+        chats.push({ id: data.id, title: data.title, updatedAt: data.updatedAt, model: data.model, count: (data.messages || []).length });
+      } catch { /* skip corrupt file */ }
+    }
+    chats.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    res.json({ chats });
+  } catch (err) {
+    sendErr(res, err);
+  }
+});
+
+app.get('/api/chats/:id', async (req, res) => {
+  try {
+    res.json(JSON.parse(await fs.readFile(chatFile(req.params.id), 'utf8')));
+  } catch (err) {
+    sendErr(res, err, 404);
+  }
+});
+
+app.put('/api/chats/:id', async (req, res) => {
+  try {
+    const file = chatFile(req.params.id);
+    let createdAt = Date.now();
+    try { createdAt = JSON.parse(await fs.readFile(file, 'utf8')).createdAt || createdAt; } catch { /* new chat */ }
+    const { title, model, messages } = req.body;
+    await fs.writeFile(file, JSON.stringify({ id: req.params.id, title, model, messages, createdAt, updatedAt: Date.now() }));
+    res.json({ ok: true });
+  } catch (err) {
+    sendErr(res, err);
+  }
+});
+
+app.delete('/api/chats/:id', async (req, res) => {
+  try {
+    await fs.unlink(chatFile(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    sendErr(res, err, 404);
+  }
+});
+
 // ---------- agent tools ----------
 
 const TOOL_DEFS = [

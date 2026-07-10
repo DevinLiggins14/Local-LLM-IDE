@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Local LLM IDE</title>
+  <title>Local LLM IDE — Batcomputer</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div id="topbar">
-    <span id="logo">⚡ Local LLM IDE</span>
+    <span id="logo">
+      <svg id="logo-bat" viewBox="0 0 200 70" xmlns="http://www.w3.org/2000/svg"><path d="M4 28 Q44 10 86 15 L91 4 L96 13 L104 13 L109 4 L114 15 Q156 10 196 28 Q170 34 162 52 Q150 40 136 46 Q124 38 114 44 Q108 40 100 62 Q92 40 86 44 Q76 38 64 46 Q50 40 38 52 Q30 34 4 28 Z" fill="currentColor"/></svg>
+      Local LLM IDE
+    </span>
     <button id="open-folder" title="Open a workspace folder">Open Folder</button>
     <span id="ws-path" title=""></span>
     <span class="spacer"></span>
@@ -41,14 +44,26 @@
     <div id="editor-area">
       <div id="tabs"></div>
       <div id="editor"></div>
-      <div id="editor-empty">Open a folder, then click a file — or just start chatting →</div>
+      <div id="editor-empty">
+        <svg id="watermark-bat" viewBox="0 0 200 70" xmlns="http://www.w3.org/2000/svg"><path d="M4 28 Q44 10 86 15 L91 4 L96 13 L104 13 L109 4 L114 15 Q156 10 196 28 Q170 34 162 52 Q150 40 136 46 Q124 38 114 44 Q108 40 100 62 Q92 40 86 44 Q76 38 64 46 Q50 40 38 52 Q30 34 4 28 Z" fill="none" stroke="currentColor" stroke-width="0.8" stroke-dasharray="3 2"/></svg>
+        <div>Open a folder, then click a file — or just start chatting →</div>
+      </div>
     </div>
     <div id="chat-panel">
       <div id="chat-header">
         <span id="chat-model-label">LOCAL MODEL</span>
-        <button id="clear-chat" title="Clear conversation">New chat</button>
+        <span class="header-buttons">
+          <button id="chat-history-btn" title="View or delete previous chats">Chats</button>
+          <button id="clear-chat" title="Start a new conversation">New chat</button>
+        </span>
       </div>
-      <div id="chat-messages"></div>
+      <div id="chat-body">
+        <div id="chat-messages"></div>
+        <div id="chat-history" class="hidden">
+          <div class="history-title">STORED SESSIONS</div>
+          <div id="chat-history-list"></div>
+        </div>
+      </div>
       <div id="chat-input-area">
         <div id="context-chips"></div>
         <textarea id="chat-input" rows="3" placeholder="Ask the model… (Enter to send, Shift+Enter for newline)"></textarea>
