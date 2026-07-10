@@ -190,23 +190,49 @@ app.post('/api/ds4/restart', async (req, res) => {
   }
 });
 
-app.get('/api/system', (req, res) => {
-  const total = os.totalmem();
-  const cpu = Math.min(100, Math.round((os.loadavg()[0] / os.cpus().length) * 100));
-  // vm_stat gives real pressure; os.freemem() would count file cache as used.
-  execFile('vm_stat', (err, out) => {
-    let used = total - os.freemem();
-    if (!err) {
-      const page = parseInt(out.match(/page size of (\d+)/)?.[1] || '16384', 10);
-      const grab = (label) => parseInt(out.match(new RegExp(`${label}:\\s+(\\d+)`))?.[1] || '0', 10);
-      used = (grab('Pages active') + grab('Pages wired down') + grab('Pages occupied by compressor')) * page;
+// True CPU %: diff cumulative per-core tick counters between polls.
+let lastCpuTimes = null;
+function cpuPercent() {
+  const now = os.cpus().map((c) => c.times);
+  let pct = Math.min(100, Math.round((os.loadavg()[0] / now.length) * 100)); // first-call fallback
+  if (lastCpuTimes) {
+    let busy = 0, total = 0;
+    for (let i = 0; i < now.length; i++) {
+      const a = lastCpuTimes[i], b = now[i];
+      const dBusy = b.user - a.user + (b.nice - a.nice) + (b.sys - a.sys) + (b.irq - a.irq);
+      const dTotal = dBusy + (b.idle - a.idle);
+      busy += dBusy; total += dTotal;
     }
-    res.json({
-      cpu,
-      ram: Math.round((used / total) * 100),
-      ramUsedGB: +(used / 1e9).toFixed(1),
-      ramTotalGB: Math.round(total / 1e9),
-    });
+    if (total > 0) pct = Math.round((busy / total) * 100);
+  }
+  lastCpuTimes = now;
+  return pct;
+}
+
+const run = (cmd, args) => new Promise((r) => execFile(cmd, args, (err, out) => r(err ? '' : out)));
+
+app.get('/api/system', async (req, res) => {
+  const total = os.totalmem();
+  const cpu = cpuPercent();
+  // vm_stat gives real pressure; os.freemem() would count file cache as used.
+  // ioreg exposes Apple Silicon GPU utilization without sudo.
+  const [vm, accel] = await Promise.all([
+    run('vm_stat', []),
+    run('ioreg', ['-r', '-d', '1', '-w', '0', '-c', 'IOAccelerator']),
+  ]);
+  let used = total - os.freemem();
+  if (vm) {
+    const page = parseInt(vm.match(/page size of (\d+)/)?.[1] || '16384', 10);
+    const grab = (label) => parseInt(vm.match(new RegExp(`${label}:\\s+(\\d+)`))?.[1] || '0', 10);
+    used = (grab('Pages active') + grab('Pages wired down') + grab('Pages occupied by compressor')) * page;
+  }
+  const gpuMatch = accel.match(/"Device Utilization %"=(\d+)/);
+  res.json({
+    cpu,
+    gpu: gpuMatch ? parseInt(gpuMatch[1], 10) : null,
+    ram: Math.round((used / total) * 100),
+    ramUsedGB: +(used / 1e9).toFixed(1),
+    ramTotalGB: Math.round(total / 1e9),
   });
 });
 

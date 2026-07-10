@@ -582,6 +582,13 @@ async function pollSystem() {
     $('#ram-bar').style.background = sys.ram > 90 ? 'var(--red)' : 'var(--accent-dim)';
     $('#ram-val').textContent = sys.ram + '%';
     $('#ram-bar').parentElement.title = `${sys.ramUsedGB} / ${sys.ramTotalGB} GB`;
+    if (sys.gpu !== null) {
+      $('#gpu-bar').style.width = sys.gpu + '%';
+      $('#gpu-bar').style.background = sys.gpu > 85 ? 'var(--red)' : 'var(--accent-dim)';
+      $('#gpu-val').textContent = sys.gpu + '%';
+    } else {
+      $('#gpu-val').textContent = 'n/a';
+    }
   } catch { /* backend gone; leave last values */ }
   try {
     ds4Status = await api('/api/ds4/status');
