@@ -1,0 +1,74 @@
+<svg viewBox="0 0 1180 640" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <text x="590" y="38" text-anchor="middle" font-size="24" font-weight="bold" fill="#7d8590">Local LLM IDE — Architecture</text>
+  <text x="590" y="64" text-anchor="middle" font-size="14" fill="#7d8590">All traffic stays on 127.0.0.1 — works fully offline</text>
+
+  <!-- Electron app -->
+  <rect x="40" y="110" width="300" height="390" rx="10" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+  <text x="190" y="145" text-anchor="middle" font-size="16" font-weight="bold" fill="#7dd3fc">Local LLM IDE</text>
+  <text x="190" y="165" text-anchor="middle" font-size="12" fill="#94a3b8">Electron desktop app / browser</text>
+
+  <rect x="65" y="190" width="250" height="80" rx="8" fill="#1e293b" stroke="#475569"/>
+  <text x="190" y="223" text-anchor="middle" font-size="14" font-weight="bold" fill="#e2e8f0">Monaco Editor</text>
+  <text x="190" y="245" text-anchor="middle" font-size="11" fill="#94a3b8">tabs · syntax · Cmd+S save</text>
+
+  <rect x="65" y="285" width="250" height="80" rx="8" fill="#1e293b" stroke="#475569"/>
+  <text x="190" y="318" text-anchor="middle" font-size="14" font-weight="bold" fill="#e2e8f0">File Explorer</text>
+  <text x="190" y="340" text-anchor="middle" font-size="11" fill="#94a3b8">lazy-loading workspace tree</text>
+
+  <rect x="65" y="380" width="250" height="95" rx="8" fill="#1e293b" stroke="#475569"/>
+  <text x="190" y="412" text-anchor="middle" font-size="14" font-weight="bold" fill="#e2e8f0">Chat Panel</text>
+  <text x="190" y="433" text-anchor="middle" font-size="11" fill="#94a3b8">streaming markdown · thinking box</text>
+  <text x="190" y="451" text-anchor="middle" font-size="11" fill="#94a3b8">tool cards · code block actions</text>
+
+  <!-- Backend -->
+  <rect x="450" y="180" width="280" height="250" rx="10" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+  <text x="590" y="215" text-anchor="middle" font-size="16" font-weight="bold" fill="#7dd3fc">Express Backend</text>
+  <text x="590" y="235" text-anchor="middle" font-size="12" fill="#94a3b8">server.js</text>
+  <rect x="475" y="255" width="230" height="44" rx="8" fill="#1e293b" stroke="#475569"/>
+  <text x="590" y="282" text-anchor="middle" font-size="12" fill="#e2e8f0">Workspace file API</text>
+  <rect x="475" y="309" width="230" height="44" rx="8" fill="#1e293b" stroke="#475569"/>
+  <text x="590" y="336" text-anchor="middle" font-size="12" fill="#e2e8f0">Streaming chat proxy</text>
+  <rect x="475" y="363" width="230" height="44" rx="8" fill="#1e293b" stroke="#475569"/>
+  <text x="590" y="390" text-anchor="middle" font-size="12" fill="#e2e8f0">Agent tool loop</text>
+
+  <!-- ds4-server -->
+  <rect x="830" y="110" width="310" height="190" rx="10" fill="#0f172a" stroke="#0ea5e9" stroke-width="2"/>
+  <text x="985" y="145" text-anchor="middle" font-size="16" font-weight="bold" fill="#7dd3fc">ds4-server (DwarfStar)</text>
+  <text x="985" y="172" text-anchor="middle" font-size="12" fill="#e2e8f0">DeepSeek V4 Flash — local GGUF</text>
+  <text x="985" y="192" text-anchor="middle" font-size="12" fill="#e2e8f0">Metal on Apple Silicon</text>
+  <text x="985" y="212" text-anchor="middle" font-size="12" fill="#e2e8f0">Non-think / Think High / Think Max</text>
+  <text x="985" y="240" text-anchor="middle" font-size="12" fill="#94a3b8">OpenAI-compatible API</text>
+  <text x="985" y="258" text-anchor="middle" font-size="12" fill="#94a3b8">127.0.0.1:8000</text>
+  <text x="985" y="284" text-anchor="middle" font-size="11" fill="#38bdf8">auto-started by the IDE if not running</text>
+
+  <!-- Ollama -->
+  <rect x="830" y="340" width="310" height="120" rx="10" fill="#0f172a" stroke="#334155" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="985" y="375" text-anchor="middle" font-size="16" font-weight="bold" fill="#94a3b8">Ollama daemon (optional)</text>
+  <text x="985" y="402" text-anchor="middle" font-size="12" fill="#e2e8f0">any local Ollama model</text>
+  <text x="985" y="426" text-anchor="middle" font-size="12" fill="#94a3b8">127.0.0.1:11434</text>
+
+  <!-- Workspace -->
+  <rect x="450" y="520" width="280" height="80" rx="10" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+  <text x="590" y="553" text-anchor="middle" font-size="15" font-weight="bold" fill="#e2e8f0">Workspace</text>
+  <text x="590" y="577" text-anchor="middle" font-size="12" fill="#94a3b8">project files · shell commands</text>
+
+  <!-- Arrows -->
+  <line x1="340" y1="305" x2="450" y2="305" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="395" y="292" text-anchor="middle" font-size="11" fill="#7d8590">HTTP + NDJSON</text>
+
+  <line x1="730" y1="255" x2="830" y2="215" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="762" y="210" text-anchor="middle" font-size="11" fill="#7d8590">SSE</text>
+  <text x="762" y="226" text-anchor="middle" font-size="11" fill="#7d8590">/v1/chat/completions</text>
+
+  <line x1="730" y1="370" x2="830" y2="400" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="780" y="365" text-anchor="middle" font-size="11" fill="#7d8590">/api/chat</text>
+
+  <line x1="590" y1="430" x2="590" y2="520" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="668" y="480" text-anchor="middle" font-size="11" fill="#7d8590">read · write · run</text>
+</svg>
