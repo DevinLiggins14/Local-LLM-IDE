@@ -42,13 +42,13 @@ function initMonaco() {
         inherit: true,
         rules: [],
         colors: {
-          'editor.background': '#030507',
-          'editor.lineHighlightBackground': '#0a121a',
-          'editorLineNumber.foreground': '#31465a',
-          'editorLineNumber.activeForeground': '#58b6ff',
-          'editorCursor.foreground': '#58b6ff',
-          'editor.selectionBackground': '#124e7e66',
-          'editorIndentGuide.background1': '#101820',
+          'editor.background': '#010a13',
+          'editor.lineHighlightBackground': '#051a2b',
+          'editorLineNumber.foreground': '#254866',
+          'editorLineNumber.activeForeground': '#4fb3ff',
+          'editorCursor.foreground': '#4fb3ff',
+          'editor.selectionBackground': '#10456f66',
+          'editorIndentGuide.background1': '#0a2036',
         },
       });
       editor = monaco.editor.create($('#editor'), {
