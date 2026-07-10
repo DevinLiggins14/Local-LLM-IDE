@@ -60,7 +60,11 @@
       <div id="chat-body">
         <div id="chat-messages"></div>
         <div id="chat-history" class="hidden">
-          <div class="history-title">STORED SESSIONS</div>
+          <div class="history-head">
+            <span class="history-title">STORED SESSIONS</span>
+            <span id="history-size" class="history-size"></span>
+            <button id="clear-all-chats" class="danger" title="Delete every stored chat from disk">Clear all</button>
+          </div>
           <div id="chat-history-list"></div>
         </div>
       </div>

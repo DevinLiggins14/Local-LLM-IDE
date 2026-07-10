@@ -529,6 +529,12 @@ function renderStoredMessages() {
   scrollChat();
 }
 
+function fmtBytes(n) {
+  if (!n) return '0 KB';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+
 async function toggleHistory() {
   const panel = $('#chat-history');
   if (!panel.classList.contains('hidden')) {
@@ -538,8 +544,10 @@ async function toggleHistory() {
   panel.classList.remove('hidden');
   const list = $('#chat-history-list');
   list.innerHTML = '';
+  $('#history-size').textContent = '';
   try {
-    const { chats } = await api('/api/chats');
+    const { chats, totalBytes } = await api('/api/chats');
+    $('#history-size').textContent = chats.length ? `${chats.length} · ${fmtBytes(totalBytes)}` : '';
     if (!chats.length) {
       list.innerHTML = '<div class="history-empty">NO STORED SESSIONS</div>';
       return;
@@ -872,6 +880,20 @@ function init() {
   $('#attach-selection').addEventListener('click', attachSelection);
   $('#clear-chat').addEventListener('click', newChat);
   $('#chat-history-btn').addEventListener('click', toggleHistory);
+  $('#clear-all-chats').addEventListener('click', async () => {
+    const { chats } = await api('/api/chats').catch(() => ({ chats: [] }));
+    if (!chats.length) return setStatus('no stored chats to delete');
+    if (!confirm(`Delete all ${chats.length} stored chat${chats.length > 1 ? 's' : ''} from disk? This cannot be undone.`)) return;
+    try {
+      const { deleted } = await api('/api/chats', { method: 'DELETE' });
+      $('#chat-history-list').innerHTML = '<div class="history-empty">NO STORED SESSIONS</div>';
+      $('#history-size').textContent = '';
+      state.sessionId = null; // current convo re-saves as a fresh file if continued
+      setStatus(`deleted ${deleted} stored chat${deleted > 1 ? 's' : ''}`);
+    } catch (err) {
+      setStatus(`clear failed: ${err.message}`);
+    }
+  });
   $('#chat-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
   });

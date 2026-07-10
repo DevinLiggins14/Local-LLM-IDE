@@ -250,14 +250,28 @@ app.get('/api/chats', async (req, res) => {
   try {
     const files = (await fs.readdir(CHATS_DIR)).filter((f) => f.endsWith('.json'));
     const chats = [];
+    let totalBytes = 0;
     for (const f of files) {
       try {
-        const data = JSON.parse(await fs.readFile(path.join(CHATS_DIR, f), 'utf8'));
+        const file = path.join(CHATS_DIR, f);
+        const data = JSON.parse(await fs.readFile(file, 'utf8'));
+        totalBytes += (await fs.stat(file)).size;
         chats.push({ id: data.id, title: data.title, updatedAt: data.updatedAt, model: data.model, count: (data.messages || []).length });
       } catch { /* skip corrupt file */ }
     }
     chats.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    res.json({ chats });
+    res.json({ chats, totalBytes });
+  } catch (err) {
+    sendErr(res, err);
+  }
+});
+
+// Delete ALL stored chats.
+app.delete('/api/chats', async (req, res) => {
+  try {
+    const files = (await fs.readdir(CHATS_DIR)).filter((f) => f.endsWith('.json'));
+    await Promise.all(files.map((f) => fs.unlink(path.join(CHATS_DIR, f))));
+    res.json({ ok: true, deleted: files.length });
   } catch (err) {
     sendErr(res, err);
   }
