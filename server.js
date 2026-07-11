@@ -307,6 +307,112 @@ app.delete('/api/chats/:id', async (req, res) => {
   }
 });
 
+// ---------- web tools (always available — the model is offline, the Mac isn't) ----------
+
+const WEB_TOOL_DEFS = [
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description:
+        'Search the live web (DuckDuckGo). Use for anything time-sensitive or uncertain: schedules, news, prices, versions, docs. Returns titles, URLs, and snippets.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'The search query' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fetch_url',
+      description: 'Fetch a web page and return its readable text content. Use after web_search to read a promising result.',
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string', description: 'The http(s) URL to fetch' } },
+        required: ['url'],
+      },
+    },
+  },
+];
+
+function decodeEntities(s) {
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (m, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (m, d) => String.fromCodePoint(+d))
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ');
+}
+
+function htmlToText(html) {
+  return decodeEntities(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<\/(p|div|h[1-6]|li|tr|section|article)>/gi, '\n')
+      .replace(/<(br|hr)[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+  )
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function assertPublicHttpUrl(raw) {
+  const u = new URL(raw);
+  if (!/^https?:$/.test(u.protocol)) throw new Error('only http/https URLs are allowed');
+  if (/^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|\[?::1)/.test(u.hostname) || u.hostname.endsWith('.local')) {
+    throw new Error('local/private addresses are not fetchable');
+  }
+  return u;
+}
+
+const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
+
+async function webSearch(query) {
+  const r = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+    headers: { 'User-Agent': BROWSER_UA },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!r.ok) throw new Error(`search failed: HTTP ${r.status}`);
+  const html = await r.text();
+  const results = [];
+  const linkRe = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+  const snipRe = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+  let m;
+  const links = [];
+  while ((m = linkRe.exec(html)) && links.length < 6) {
+    let url = m[1];
+    const uddg = url.match(/[?&]uddg=([^&]+)/);
+    if (uddg) url = decodeURIComponent(uddg[1]);
+    links.push({ url, title: htmlToText(m[2]) });
+  }
+  const snips = [];
+  while ((m = snipRe.exec(html)) && snips.length < 6) snips.push(htmlToText(m[1]));
+  links.forEach((l, i) => results.push(`${i + 1}. ${l.title}\n   ${l.url}\n   ${snips[i] || ''}`));
+  if (!results.length) return 'No results (the search page may have changed or the network is down).';
+  return results.join('\n\n');
+}
+
+async function fetchUrl(raw) {
+  const u = assertPublicHttpUrl(raw);
+  const r = await fetch(u, {
+    headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5' },
+    signal: AbortSignal.timeout(20000),
+    redirect: 'follow',
+  });
+  const type = r.headers.get('content-type') || '';
+  if (!/text\/|json|xml/.test(type)) throw new Error(`unsupported content-type: ${type}`);
+  let body = await r.text();
+  if (body.length > 800_000) body = body.slice(0, 800_000);
+  const text = /html/.test(type) ? htmlToText(body) : body;
+  const out = text.slice(0, 10_000);
+  return `[${r.status}] ${u.href}\n\n${out}${text.length > 10_000 ? '\n… [truncated]' : ''}`;
+}
+
 // ---------- agent tools ----------
 
 const TOOL_DEFS = [
@@ -366,6 +472,10 @@ const TOOL_DEFS = [
 
 async function runTool(name, args, workspace) {
   switch (name) {
+    case 'web_search':
+      return await webSearch(String(args.query || ''));
+    case 'fetch_url':
+      return await fetchUrl(String(args.url || ''));
     case 'read_file': {
       const abs = safeResolve(workspace, args.path);
       return await fs.readFile(abs, 'utf8');
@@ -430,6 +540,13 @@ async function ollamaRound(payload, emit, signal) {
         delete fallback.think;
         r = await attempt(fallback);
       }
+      if (!r.ok) errText = await r.text();
+    }
+    // Models without tool support: retry the round without tools.
+    if (!r.ok && payload.tools && /tool/i.test(errText)) {
+      const fallback = { ...payload };
+      delete fallback.tools;
+      r = await attempt(fallback);
       if (!r.ok) errText = await r.text();
     }
     if (!r.ok) throw new Error(`Ollama error ${r.status}: ${errText.slice(0, 400)}`);
@@ -551,7 +668,8 @@ app.post('/api/chat', async (req, res) => {
   try {
     const isDs4 = model.startsWith(DS4_PREFIX);
     const convo = [...messages];
-    const tools = agent && workspace ? TOOL_DEFS : undefined;
+    // Web tools ride along on every request; file/shell tools only in agent mode.
+    const tools = [...WEB_TOOL_DEFS, ...(agent && workspace ? TOOL_DEFS : [])];
 
     for (let round = 0; round < 25; round++) {
       const msg = isDs4

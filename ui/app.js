@@ -378,14 +378,21 @@ function enhanceCodeBlocks(container) {
 
 function systemPrompt() {
   const agentOn = $('#agent-toggle').checked;
-  let p = 'You are a coding assistant embedded in Local LLM IDE, a lightweight IDE on the user\'s Mac.';
+  const now = new Date().toLocaleString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
+  let p = `You are the assistant in The Batcomputer, a local-LLM IDE on the user's Mac. Current local date and time: ${now}.`;
   if (state.workspace) p += ` The current workspace folder is ${state.workspace}.`;
+  p += ' You always have web_search and fetch_url tools — use them (do not guess) for anything time-sensitive ' +
+    'or uncertain: schedules, live events, news, prices, versions, documentation. Search first, then fetch a promising result if needed.';
   if (agentOn) {
-    p += ' You have tools to read/write files, list directories, and run shell commands in the workspace. ' +
+    p += ' Agent mode is ON: you also have read_file, write_file, list_directory, and run_command tools scoped to the workspace. ' +
       'Use them proactively to complete tasks. Paths are relative to the workspace root. ' +
       'After changing files, briefly summarize what you changed.';
   } else {
-    p += ' When suggesting code changes, use fenced code blocks.';
+    p += ' Agent mode is OFF: you have NO file or shell access — never claim to run commands or read files; ' +
+      'ask the user to enable Agent mode if a task needs it. When suggesting code changes, use fenced code blocks.';
   }
   return p;
 }

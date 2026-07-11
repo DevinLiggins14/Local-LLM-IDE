@@ -34,6 +34,7 @@ In this project, we build a Batcomputer-styled desktop IDE for locally hosted LL
 | **Agent tool loop**    | Lets the model call `read_file`, `write_file`, `list_directory`, and `run_command`, scoped to the open workspace. |
 | **Ollama** (optional)  | Any locally pulled Ollama model shows up in the model dropdown alongside DeepSeek. |
 | **Chat sessions**      | Conversations persist to `~/.local-llm-ide/chats/`; the Chats panel reopens or deletes any previous session. |
+| **Web tools**          | `web_search` and `fetch_url` are always available to the model (keyless, via DuckDuckGo) — the weights are offline, but live facts aren't. |
 
 ### **Notes for Usage**
 1. **Required**: Node.js 20+ and one local inference server — DwarfStar `ds4-server` with a DeepSeek V4 Flash GGUF (default), or an Ollama daemon with at least one pulled model.
