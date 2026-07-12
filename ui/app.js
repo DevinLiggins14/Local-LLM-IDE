@@ -703,6 +703,7 @@ async function loadModels() {
       state.model = sel.value;
       localStorage.setItem('fc.model', sel.value);
       updateModelLabel();
+      pollSystem(); // HUD engine row follows the selected model immediately
     });
   } catch (err) {
     setStatus(`Ollama unreachable: ${err.message}`);
@@ -752,7 +753,6 @@ function wireDropZone() {
 
 // ---------- system HUD ----------
 
-let ds4Status = null;
 async function pollSystem() {
   try {
     const sys = await api('/api/system');
@@ -772,13 +772,18 @@ async function pollSystem() {
     }
   } catch { /* backend gone; leave last values */ }
   try {
-    ds4Status = await api('/api/ds4/status');
+    const st = await api(`/api/engine/status?model=${encodeURIComponent(state.model)}`);
+    $('#engine-label').textContent = st.engine;
     const el = $('#ds4-state');
     el.classList.remove('offline', 'loading');
-    if (ds4Status.alive) {
-      const ktok = ds4Status.ctx ? Math.round(ds4Status.ctx / 1000) + 'K' : '?';
-      el.textContent = `ONLINE · CTX ${ktok}${ds4Status.thinkMaxCapable ? ' · TMAX' : ''}`;
-    } else if (ds4Status.loading) {
+    if (st.alive) {
+      if (st.engine === 'DS4') {
+        const ktok = st.ctx ? Math.round(st.ctx / 1000) + 'K' : '?';
+        el.textContent = `ONLINE · CTX ${ktok}${st.thinkMaxCapable ? ' · TMAX' : ''}`;
+      } else {
+        el.textContent = st.loaded ? 'ONLINE · IN MEMORY' : 'ONLINE · IDLE';
+      }
+    } else if (st.loading) {
       el.textContent = 'LOADING MODEL…';
       el.classList.add('loading');
     } else {
@@ -800,7 +805,7 @@ function ds4CmdPreview() {
   $('#ds4-cmd').textContent = cmd;
 }
 
-function openDs4Modal() {
+async function openDs4Modal() {
   $('#ds4-modal').classList.remove('hidden');
   const saved = JSON.parse(localStorage.getItem('fc.ds4cfg') || '{}');
   if (saved.ctx) $('#ds4-ctx').value = saved.ctx;
@@ -810,19 +815,27 @@ function openDs4Modal() {
   const match = [...presetSel.options].find((o) => o.value === String($('#ds4-ctx').value));
   presetSel.value = match ? match.value : 'custom';
   ds4CmdPreview();
-  renderDs4Status();
+  $('#ds4-status-line').textContent = 'querying server…';
+  try {
+    renderDs4Status(await api('/api/ds4/status'));
+  } catch (err) {
+    $('#ds4-status-line').textContent = `status unavailable: ${err.message}`;
+  }
 }
 
-function renderDs4Status() {
+function renderDs4Status(st) {
   const line = $('#ds4-status-line');
-  if (!ds4Status) { line.textContent = 'querying server…'; return; }
-  if (ds4Status.alive) {
-    line.innerHTML = `<span class="online">ONLINE</span> · pid ${ds4Status.pid} · ctx ${ds4Status.ctx ?? '?'} · think max ${ds4Status.thinkMaxCapable ? 'available' : 'unavailable (ctx too small)'}<br>`;
-    line.appendChild(document.createTextNode(ds4Status.args || ''));
-  } else if (ds4Status.loading) {
-    line.innerHTML = `<span class="online">LOADING</span> · pid ${ds4Status.pid} — model is being paged in`;
+  const note = state.model.startsWith('ds4:')
+    ? ''
+    : `NOTE: the selected model (${state.model}) runs under Ollama and is managed by the Ollama daemon. This panel configures the local DeepSeek engine (ds4-server) only.<br>`;
+  if (!st) { line.textContent = 'querying server…'; return; }
+  if (st.alive) {
+    line.innerHTML = `${note}<span class="online">ONLINE</span> · pid ${st.pid} · ctx ${st.ctx ?? '?'} · think max ${st.thinkMaxCapable ? 'available' : 'unavailable (ctx too small)'}<br>`;
+    line.appendChild(document.createTextNode(st.args || ''));
+  } else if (st.loading) {
+    line.innerHTML = `${note}<span class="online">LOADING</span> · pid ${st.pid} — model weights are being paged in`;
   } else {
-    line.innerHTML = `<span class="offline">OFFLINE</span> — apply a configuration to launch`;
+    line.innerHTML = `${note}<span class="offline">OFFLINE</span> — apply a configuration to launch`;
   }
 }
 
@@ -844,16 +857,18 @@ async function applyDs4Config() {
     });
     setStatus('ds4-server restarting — model loading');
     // poll until it comes back
+    let st = null;
     for (let i = 0; i < 240; i++) {
       await new Promise((r) => setTimeout(r, 2000));
-      await pollSystem();
-      renderDs4Status();
-      if (ds4Status?.alive) break;
+      st = await api('/api/ds4/status').catch(() => null);
+      renderDs4Status(st);
+      pollSystem();
+      if (st?.alive) break;
     }
-    setStatus(ds4Status?.alive ? 'ds4-server online' : 'ds4-server still loading (see ~/.ds4-server.log)');
+    setStatus(st?.alive ? 'ds4-server online' : 'ds4-server still loading (see ~/.ds4-server.log)');
   } catch (err) {
     setStatus(`restart failed: ${err.message}`);
-    renderDs4Status();
+    renderDs4Status(await api('/api/ds4/status').catch(() => null));
   } finally {
     btn.disabled = false;
     btn.textContent = 'Apply & Restart';

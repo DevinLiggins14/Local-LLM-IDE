@@ -70,18 +70,29 @@ async function ensureDs4() {
   return 'starting';
 }
 
-// pid + args of whatever is listening on the ds4 port.
+// pid + args of the ds4-server: the port listener if bound, otherwise any
+// ds4-server process (it loads the model BEFORE binding the port, so a
+// loading server has a process but no listener).
 function ds4Process() {
   return new Promise((resolve) => {
     execFile('lsof', ['-ti', `tcp:${ds4Port()}`, '-sTCP:LISTEN'], (err, out) => {
       const pid = parseInt(out, 10);
-      if (!pid) return resolve(null);
-      execFile('ps', ['-p', String(pid), '-o', 'args='], (err2, args) => {
-        resolve({ pid, args: (args || '').trim() });
+      if (pid) {
+        execFile('ps', ['-p', String(pid), '-o', 'args='], (err2, args) => {
+          resolve({ pid, args: (args || '').trim(), listening: true });
+        });
+        return;
+      }
+      execFile('pgrep', ['-fl', 'ds4-server'], (err3, out2) => {
+        const line = (out2 || '').split('\n').find((l) => l.includes('ds4-server'));
+        if (!line) return resolve(null);
+        const pid2 = parseInt(line, 10);
+        resolve({ pid: pid2, args: line.replace(/^\d+\s+/, '').trim(), listening: false });
       });
     });
   });
 }
+
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -169,6 +180,33 @@ app.get('/api/models', async (req, res) => {
     }
   } catch { /* LM Studio not running — fine */ }
   res.json({ models, ds4: ds4Status });
+});
+
+// Engine status for whichever model the UI has selected.
+app.get('/api/engine/status', async (req, res) => {
+  const model = String(req.query.model || DEFAULT_MODEL);
+  if (model.startsWith(DS4_PREFIX)) {
+    const [proc, alive] = await Promise.all([ds4Process(), ds4Alive()]);
+    const ctxMatch = proc?.args.match(/--ctx\s+(\d+)/);
+    const ctx = ctxMatch ? parseInt(ctxMatch[1], 10) : null;
+    return res.json({ engine: 'DS4', alive, loading: !!proc && !alive, ctx, thinkMaxCapable: ctx !== null && ctx >= 393216 });
+  }
+  try {
+    const [tagsR, psR] = await Promise.all([
+      fetch(`${OLLAMA}/api/tags`, { signal: AbortSignal.timeout(1500) }),
+      fetch(`${OLLAMA}/api/ps`, { signal: AbortSignal.timeout(1500) }),
+    ]);
+    const tags = await tagsR.json();
+    const ps = await psR.json();
+    res.json({
+      engine: 'OLLAMA',
+      alive: (tags.models || []).some((m) => m.name === model),
+      loading: false,
+      loaded: (ps.models || []).some((m) => m.name === model),
+    });
+  } catch {
+    res.json({ engine: 'OLLAMA', alive: false, loading: false, loaded: false });
+  }
 });
 
 app.get('/api/ds4/status', async (req, res) => {
