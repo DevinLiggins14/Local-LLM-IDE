@@ -328,18 +328,22 @@ function git(root, args, opts = {}) {
   });
 }
 
+async function gitClone(rawUrl) {
+  const url = String(rawUrl || '').trim();
+  if (!/^(https:\/\/|git@|ssh:\/\/)[\w.@:/~+-]+$/.test(url)) throw new Error('that does not look like a git URL');
+  const name = (url.split('/').pop() || 'repo').replace(/\.git$/, '') || 'repo';
+  let dest = path.join(os.homedir(), 'Downloads', name);
+  for (let n = 1; fsSync.existsSync(dest); n++) dest = path.join(os.homedir(), 'Downloads', `${name}-${n}`);
+  await new Promise((resolve, reject) => {
+    execFile('git', ['clone', url, dest], { timeout: 300000, maxBuffer: 8 * 1024 * 1024 }, (err, so, se) =>
+      err ? reject(new Error((se || err.message).trim().slice(0, 400))) : resolve());
+  });
+  return dest;
+}
+
 app.post('/api/git/clone', async (req, res) => {
   try {
-    const url = String(req.body.url || '').trim();
-    if (!/^(https:\/\/|git@|ssh:\/\/)[\w.@:/~+-]+$/.test(url)) throw new Error('that does not look like a git URL');
-    const name = (url.split('/').pop() || 'repo').replace(/\.git$/, '') || 'repo';
-    let dest = path.join(os.homedir(), 'Downloads', name);
-    for (let n = 1; fsSync.existsSync(dest); n++) dest = path.join(os.homedir(), 'Downloads', `${name}-${n}`);
-    await new Promise((resolve, reject) => {
-      execFile('git', ['clone', url, dest], { timeout: 300000, maxBuffer: 8 * 1024 * 1024 }, (err, so, se) =>
-        err ? reject(new Error((se || err.message).trim().slice(0, 400))) : resolve());
-    });
-    res.json({ ok: true, path: dest });
+    res.json({ ok: true, path: await gitClone(req.body.url) });
   } catch (err) {
     sendErr(res, err);
   }
@@ -498,6 +502,22 @@ const WEB_TOOL_DEFS = [
     },
   },
 ];
+
+const CLONE_TOOL_DEF = {
+  type: 'function',
+  function: {
+    name: 'clone_repo',
+    description:
+      'Clone a git repository into ~/Downloads and switch the IDE workspace to it. ' +
+      'Use when the user asks to clone, build, or work on a repo they do not have open. ' +
+      'After it succeeds, file and shell tools operate inside the cloned repo (if Agent mode is on).',
+    parameters: {
+      type: 'object',
+      properties: { url: { type: 'string', description: 'The git URL, e.g. https://github.com/user/repo.git' } },
+      required: ['url'],
+    },
+  },
+};
 
 function decodeEntities(s) {
   return s
@@ -1006,18 +1026,21 @@ app.post('/api/chat', async (req, res) => {
     const isLms = model.startsWith(LMS_PREFIX);
     const openAiHistory = isDs4 || isLms; // both keep OpenAI-format tool history
     const convo = [...messages];
-    // Web tools ride along on every request; file/shell tools only in agent mode.
-    const allTools = [...WEB_TOOL_DEFS, ...(agent && workspace ? TOOL_DEFS : [])];
+    // Web tools + clone ride along on every request; file/shell tools only in
+    // agent mode with a workspace. `ws` is mutable: clone_repo switches it
+    // mid-turn (and the UI follows via the 'workspace' event).
+    let ws = workspace;
+    const buildTools = () => [...WEB_TOOL_DEFS, CLONE_TOOL_DEF, ...(agent && ws ? TOOL_DEFS : [])];
     // Loop guards: dedupe repeated searches, and past the budget stop offering
     // tools entirely so the model must answer with what it has.
     const searchesSeen = new Set();
     const fetchesSeen = new Set();
     const MAX_SEARCHES = 5;
-    const TOOL_ROUNDS = agent && workspace ? 24 : 8;
+    const toolRounds = () => (agent && ws ? 24 : 8);
     const normQuery = (q) => sanitizeQuery(q).toLowerCase().split(' ').sort().join(' ');
 
     for (let round = 0; round < 25; round++) {
-      const tools = round < TOOL_ROUNDS ? allTools : undefined;
+      const tools = round < toolRounds() ? buildTools() : undefined;
       const offered = new Set((tools || []).map((t) => t.function.name));
       const msg = isDs4
         ? await ds4Round({ messages: convo, think, tools }, emit, abort.signal)
@@ -1060,13 +1083,20 @@ app.post('/api/chat', async (req, res) => {
                 'Answer from what you have, state what you could not confirm, or ask the user to clarify.';
             } else {
               searchesSeen.add(norm);
-              result = await runTool(name, args || {}, workspace);
+              result = await runTool(name, args || {}, ws);
             }
           } else if (name === 'fetch_url' && fetchesSeen.has(String(args?.url || '').trim())) {
             result = 'DUPLICATE FETCH — you already fetched this exact URL this turn. Reuse that content instead of fetching again.';
+          } else if (name === 'clone_repo') {
+            const dest = await gitClone(requireArg(args, 'url'));
+            ws = dest;
+            emit({ type: 'workspace', path: dest });
+            result = `cloned to ${dest} and switched the workspace there. ` +
+              (agent ? 'File and shell tools now operate inside this repo.' :
+                'Agent mode is off, so tell the user to enable it if they want you to build or modify the repo.');
           } else {
             if (name === 'fetch_url') fetchesSeen.add(String(args?.url || '').trim());
-            result = await runTool(name, args || {}, workspace);
+            result = await runTool(name, args || {}, ws);
           }
         } catch (err) {
           result = `ERROR: ${err.message}`;

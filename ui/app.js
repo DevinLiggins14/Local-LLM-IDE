@@ -392,7 +392,9 @@ function systemPrompt() {
     'events/schedules/scores. At most 2-3 searches per question — never rephrase the same failed search; ' +
     'if results do not answer the question, say what you could not confirm. If the question itself is ambiguous ' +
     'or contains a possible typo, ask the user a brief clarifying question INSTEAD of searching repeatedly. ' +
-    'Simple timezone math (ET to CT is minus 1 hour) needs no search.';
+    'Simple timezone math (ET to CT is minus 1 hour) needs no search. ' +
+    'You also always have clone_repo: it clones a git URL into ~/Downloads and switches the IDE workspace to the ' +
+    'clone — use it when the user asks to clone/build/work on a repo that is not open.';
   if (agentOn && state.workspace) {
     p += ' Agent mode is ON: you also have read_file, write_file, list_directory, and run_command tools scoped to the workspace. ' +
       'Use them proactively to complete tasks. Paths are relative to the workspace root. ' +
@@ -474,6 +476,14 @@ async function sendChat() {
             if (ev.name === 'write_file' && ev.args?.path) touchedFiles.add(ev.args.path);
             break;
           case 'tool_result': view.toolResult(currentCard, ev.result); currentCard = null; break;
+          case 'workspace':
+            state.workspace = ev.path;
+            localStorage.setItem('fc.workspace', ev.path);
+            updateWsLabel();
+            loadTree();
+            refreshScm();
+            setStatus(`workspace switched to ${ev.path.split('/').pop()}`);
+            break;
           case 'stats':
             if (ev.eval_count && ev.eval_duration) {
               const tps = (ev.eval_count / (ev.eval_duration / 1e9)).toFixed(1);
